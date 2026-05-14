@@ -2,720 +2,406 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>PI AUTO TRANSFER BOT</title>
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&display=swap');
+        
         :root {
-            --bg-color: #050e17;
-            --panel-bg: #091624;
-            --border-color: #1a365d;
-            --text-main: #4a90e2;
-            --text-light: #82b1ff;
-            --accent: #00e5ff;
-            --accent-hover: #00b8d4;
-            --success: #00e676;
-            --danger: #ff1744;
-            --font-main: 'Courier New', Courier, monospace;
+            --bg-main: #050b14;
+            --bg-panel: #09121f;
+            --border-color: #162b48;
+            --text-primary: #53759e;
+            --text-glow: #3d7ee6;
+            --text-light: #a6c8ff;
+            --font-mono: 'Courier Prime', monospace;
         }
 
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-
-        body {
-            background-color: var(--bg-color);
-            color: var(--text-light);
-            font-family: var(--font-main);
-            font-size: 14px;
-            padding: 20px;
-            display: flex;
-            justify-content: center;
-        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: var(--font-mono); }
+        
+        body { background-color: var(--bg-main); display: flex; justify-content: center; min-height: 100vh; padding: 10px; }
 
         .app-container {
-            width: 100%;
-            max-width: 600px;
-            background: var(--panel-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            box-shadow: 0 0 20px rgba(0, 229, 255, 0.1);
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
+            width: 100%; max-width: 450px; background-color: var(--bg-panel);
+            border: 1px solid var(--border-color); display: flex; flex-direction: column;
+            box-shadow: 0 0 30px rgba(13, 27, 46, 0.8);
         }
 
-        header {
-            text-align: center;
-            padding: 20px;
-            border-bottom: 1px solid var(--border-color);
-            background: linear-gradient(180deg, #0b1d30 0%, var(--panel-bg) 100%);
+        /* Window Bar */
+        .window-bar {
+            background-color: #03060a; padding: 8px 15px; display: flex; justify-content: space-between;
+            align-items: center; border-bottom: 1px solid var(--border-color); font-size: 10px; color: var(--text-primary);
         }
+        .window-dots { display: flex; gap: 5px; }
+        .dot { width: 8px; height: 8px; border-radius: 50%; }
+        .dot.red { background-color: #ff5f56; } .dot.yellow { background-color: #ffbd2e; } .dot.green { background-color: #27c93f; }
 
-        h1 {
-            color: var(--text-main);
-            font-size: 1.2rem;
-            letter-spacing: 2px;
-            margin-bottom: 5px;
-            text-shadow: 0 0 10px rgba(74, 144, 226, 0.3);
-        }
+        /* Header */
+        .header { text-align: center; padding: 20px 15px; border-bottom: 1px solid var(--border-color); }
+        .sys-status { display: inline-block; border: 1px solid var(--border-color); padding: 3px 15px; font-size: 10px; color: var(--text-glow); margin-bottom: 15px; }
+        h1 { font-size: 1.4rem; color: var(--text-light); letter-spacing: 2px; margin-bottom: 5px; }
+        .subtitle { font-size: 0.65rem; color: var(--text-primary); letter-spacing: 2px; }
 
-        .subtitle { font-size: 0.7rem; color: #5c7c99; letter-spacing: 1px; }
+        /* Tabs */
+        .tabs { display: flex; border-bottom: 1px solid var(--border-color); padding: 0 20px; gap: 20px; }
+        .tab { padding: 15px 0; font-size: 0.85rem; color: var(--text-primary); cursor: pointer; border-bottom: 2px solid transparent; }
+        .tab.active { color: var(--text-light); border-bottom: 2px solid var(--text-glow); }
 
-        .tabs {
-            display: flex;
-            border-bottom: 1px solid var(--border-color);
-        }
+        /* Content */
+        .content { padding: 20px; flex-grow: 1; overflow-y: auto; }
+        .section-header { border-left: 2px solid var(--text-glow); padding-left: 10px; margin-bottom: 20px; }
+        .section-header h2 { font-size: 0.9rem; color: var(--text-light); }
+        .section-header p { font-size: 0.7rem; color: var(--text-primary); margin-top: 3px; }
 
-        .tab {
-            flex: 1;
-            padding: 12px;
-            text-align: center;
-            cursor: pointer;
-            background: transparent;
-            color: var(--text-light);
-            border: none;
-            outline: none;
-            font-family: inherit;
-            transition: 0.3s;
-        }
-
-        .tab.active {
-            color: var(--accent);
-            border-bottom: 2px solid var(--accent);
-            background: rgba(0, 229, 255, 0.05);
-        }
-
-        .content { padding: 20px; max-height: 70vh; overflow-y: auto; }
-        .content::-webkit-scrollbar { width: 6px; }
-        .content::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 3px; }
-
-        .section {
-            margin-bottom: 25px;
-            padding: 15px;
-            border: 1px solid var(--border-color);
-            border-radius: 4px;
-            position: relative;
-        }
-
-        .section-title {
-            position: absolute;
-            top: -10px;
-            left: 10px;
-            background: var(--panel-bg);
-            padding: 0 5px;
-            color: var(--text-main);
-            font-size: 0.8rem;
-            font-weight: bold;
-        }
-
-        .form-group { margin-bottom: 15px; }
-        .form-group label {
-            display: block;
-            margin-bottom: 5px;
-            color: var(--text-main);
-            font-size: 0.75rem;
-            text-transform: uppercase;
-        }
-
-        .input-wrapper { display: flex; gap: 5px; }
-
+        /* Form */
+        .form-group { margin-bottom: 18px; position: relative; }
+        label { display: block; font-size: 0.75rem; color: var(--text-primary); margin-bottom: 6px; text-transform: uppercase; font-weight: bold; }
         input, select, textarea {
-            width: 100%;
-            background: #040a12;
-            border: 1px solid var(--border-color);
-            color: var(--accent);
-            padding: 10px;
-            font-family: inherit;
-            border-radius: 4px;
-            outline: none;
+            width: 100%; background-color: rgba(6, 13, 22, 0.5); border: 1px solid var(--border-color);
+            padding: 12px; color: var(--text-light); border-radius: 4px; font-size: 0.85rem; outline: none;
         }
+        input:focus, select:focus, textarea:focus { border-color: var(--text-glow); }
+        .input-icon { position: absolute; right: 12px; top: 32px; color: var(--text-primary); cursor: pointer; }
 
-        input:focus, textarea:focus { border-color: var(--accent); }
+        /* Toggles */
+        .toggle-group { display: flex; gap: 10px; }
+        .toggle-btn { flex: 1; background: transparent; border: 1px solid var(--border-color); color: var(--text-primary); padding: 10px; text-align: center; border-radius: 4px; cursor: pointer; font-size: 0.8rem; text-transform: uppercase; }
+        .toggle-btn.active { border-color: var(--text-glow); color: var(--text-glow); background: rgba(61, 126, 230, 0.05); }
 
-        .btn {
-            background: transparent;
-            border: 1px solid var(--text-main);
-            color: var(--text-main);
-            padding: 8px 15px;
-            cursor: pointer;
-            font-family: inherit;
-            border-radius: 4px;
-            transition: 0.2s;
-            text-transform: uppercase;
-            font-size: 0.8rem;
-        }
+        /* Grouped Box (Fire Time & Rate Control) */
+        .grouped-box { border: 1px solid var(--border-color); border-radius: 4px; overflow: hidden; }
+        .grouped-row { display: flex; align-items: center; border-bottom: 1px solid var(--border-color); }
+        .grouped-row:last-child { border-bottom: none; }
+        .grouped-label { padding: 12px; font-size: 0.75rem; color: var(--text-primary); width: 35%; }
+        .grouped-input { flex: 1; }
+        .grouped-input input, .grouped-input select { border: none; background: transparent; padding: 12px; border-radius: 0; color: var(--text-light); }
 
-        .btn:hover { background: rgba(74, 144, 226, 0.1); }
-        .btn-action { border-color: var(--accent); color: var(--accent); }
-        .btn-action:hover { background: rgba(0, 229, 255, 0.1); }
-        .btn-icon { padding: 8px 12px; font-weight: bold; }
-        
-        .btn-primary {
-            width: 100%;
-            background: rgba(0, 229, 255, 0.1);
-            border: 1px solid var(--accent);
-            color: var(--accent);
-            padding: 15px;
-            font-size: 1rem;
-            margin-top: 10px;
-        }
-        .btn-primary:hover { background: rgba(0, 229, 255, 0.2); box-shadow: 0 0 15px rgba(0, 229, 255, 0.3); }
-        .btn-danger { border-color: var(--danger); color: var(--danger); }
-        .btn-danger:hover { background: rgba(255, 23, 68, 0.1); }
+        /* Buttons */
+        .btn-arm { width: 100%; background: linear-gradient(180deg, rgba(61, 126, 230, 0.15) 0%, rgba(61, 126, 230, 0.05) 100%); border: 1px solid var(--text-glow); color: var(--text-glow); padding: 15px; font-size: 0.9rem; font-weight: bold; border-radius: 4px; cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 10px; transition: 0.3s; margin-top: 20px;}
+        .btn-arm:hover { background: rgba(61, 126, 230, 0.25); box-shadow: 0 0 15px rgba(61, 126, 230, 0.4); }
+        .btn-fetch { background: var(--bg-main); border: 1px solid var(--border-color); color: var(--text-glow); padding: 6px 12px; font-size: 0.7rem; cursor: pointer; border-radius: 4px;}
 
-        .row { display: flex; gap: 10px; }
-        .row > * { flex: 1; }
-
-        .log-panel {
-            background: #02050a;
-            border: 1px solid var(--border-color);
-            padding: 10px;
-            height: 150px;
-            overflow-y: auto;
-            font-size: 0.75rem;
-            color: var(--success);
-            border-radius: 4px;
-        }
-        .log-entry { margin-bottom: 4px; }
-        .log-error { color: var(--danger); }
-        .log-info { color: var(--text-light); }
-        .log-warn { color: #ffd600; }
-
-        .status-bar {
-            display: flex;
-            justify-content: space-between;
-            padding: 10px 20px;
-            background: #0b1d30;
-            border-top: 1px solid var(--border-color);
-            font-size: 0.8rem;
-        }
-
-        /* Loading Spinner */
-        .spinner {
-            display: inline-block;
-            width: 12px;
-            height: 12px;
-            border: 2px solid rgba(0, 229, 255, 0.3);
-            border-radius: 50%;
-            border-top-color: var(--accent);
-            animation: spin 1s ease-in-out infinite;
-            display: none;
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
-
-        .flex-between { display: flex; justify-content: space-between; align-items: center; }
         .hidden { display: none !important; }
+        .console { margin-top: 15px; padding: 10px; background: #000; border: 1px solid var(--border-color); font-size: 0.7rem; color: #27c93f; height: 100px; overflow-y: auto; }
+        .err { color: #ff5f56; }
     </style>
 </head>
 <body>
 
 <div class="app-container">
-    <header>
-        <div style="font-size: 10px; color: var(--danger); text-align: left; margin-bottom: 10px;">SYSTEM ONLINE - v2.0.1</div>
+    <div class="window-bar">
+        <div class="window-dots"><div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div></div>
+        <div>/usr/local/bin/pibot</div>
+        <div>&#8681;</div>
+    </div>
+
+    <div class="header">
+        <div class="sys-status">SYSTEM ONLINE - v2.0.1</div>
         <h1>PI AUTO TRANSFER BOT</h1>
         <div class="subtitle">AUTOMATIC PULL & TRANSFER PROTOCOL</div>
-    </header>
+    </div>
 
     <div class="tabs">
-        <button class="tab active" onclick="switchTab('transfer')">Transfer</button>
-        <button class="tab" onclick="switchTab('fee')">Fee Manager</button>
-        <button class="tab" onclick="switchTab('logs')">System Logs</button>
+        <div class="tab active" onclick="switchTab('transfer')">Transfer</div>
+        <div class="tab" onclick="switchTab('fee')">Fee Manager</div>
     </div>
 
     <div class="content" id="tab-transfer">
-        
-        <div class="section">
-            <div class="section-title">NETWORK PROTOCOL</div>
-            <div class="row">
-                <div class="form-group">
-                    <label>Network Type</label>
-                    <select id="net-type">
-                        <option value="mainnet">Mainnet</option>
-                        <option value="testnet">Testnet</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Server Node</label>
-                    <div class="input-wrapper">
-                        <input type="text" id="server-ip" value="14.24.120.142" placeholder="IP/URL">
-                        <button class="btn" onclick="NetworkService.syncTime()">Sync</button>
-                    </div>
-                </div>
-            </div>
-            <div class="flex-between" style="font-size: 0.75rem; color: var(--text-main);">
-                <span>Limit: <span id="api-limit">101</span></span>
-                <span>Remaining: <span id="api-remaining">100</span></span>
+        <div class="section-header">
+            <h2>Transfer Coins</h2>
+            <p>Fill in the form below to transfer</p>
+        </div>
+
+        <div class="form-group">
+            <label style="display:flex; justify-content:space-between;">SENDER WALLET PASSPHRASE <button class="btn-fetch" onclick="Bot.autoSync()">SYNC</button></label>
+            <input type="password" id="sender-seed" placeholder="Enter sender wallet passphrase...">
+            <span class="input-icon" onclick="toggleVis('sender-seed')">👁</span>
+        </div>
+
+        <div class="form-group">
+            <label>RECEIVER WALLET ADDRESS</label>
+            <input type="text" id="receiver" placeholder="GC55SR2WOUJ3PH2JAHITC63VCDQIJRRX4MH5">
+        </div>
+
+        <div class="form-group">
+            <label>Fee Payer</label>
+            <div class="toggle-group">
+                <div class="toggle-btn active" id="btn-sender" onclick="toggleFee('sender')">sender</div>
+                <div class="toggle-btn" id="btn-custom" onclick="toggleFee('custom')">custom</div>
             </div>
         </div>
 
-        <div class="section">
-            <div class="section-title">SENDER WALLET</div>
-            <div class="form-group">
-                <label>Wallet Passphrase (Seed)</label>
-                <div class="input-wrapper">
-                    <input type="password" id="sender-seed" placeholder="Enter sender wallet passphrase...">
-                    <button class="btn btn-icon" onclick="toggleVis('sender-seed')">👁</button>
-                </div>
-            </div>
-            <div class="row">
-                <div class="form-group">
-                    <label>Leaked Address</label>
-                    <div class="input-wrapper">
-                        <input type="text" id="sender-address" readonly placeholder="Auto-generated...">
-                        <button class="btn btn-action" onclick="WalletService.deriveAddress()">$ <span class="spinner" id="spin-addr"></span></button>
-                        <button class="btn" onclick="openExplorer('sender-address')">Exp</button>
-                    </div>
-                </div>
-            </div>
-            <div class="row">
-                <div class="form-group">
-                    <label>Available Balance</label>
-                    <div class="input-wrapper">
-                        <input type="text" id="sender-avail" readonly value="0.00 Pi">
-                        <button class="btn btn-action" onclick="WalletService.fetchBalances()">$ <span class="spinner" id="spin-bal"></span></button>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label>Locked Balance</label>
-                    <input type="text" id="sender-locked" readonly value="0.00 Pi">
-                </div>
-            </div>
+        <div class="form-group hidden" id="custom-fee-group">
+            <label>MULTI SPONSOR WALLETS (One per line)</label>
+            <textarea id="custom-fee-seeds" rows="3" placeholder="Enter multiple sponsor passphrases. Bot will auto-rotate them."></textarea>
         </div>
 
-        <div class="section">
-            <div class="section-title">EXECUTION PROCESS</div>
-            <div class="form-group">
-                <label>Receiver Wallet Address</label>
-                <input type="text" id="receiver-address" placeholder="GC55SR2WOUJ3PH2JAHITC63VCDQIJRRX4MH5">
-            </div>
-            <div class="row">
-                <div class="form-group">
-                    <label>Tx Amount (Pi)</label>
-                    <input type="number" id="tx-amount" value="10.0" step="0.1">
-                </div>
-                <div class="form-group">
-                    <label>Memo</label>
-                    <input type="text" id="tx-memo" placeholder="Optional memo">
-                </div>
-            </div>
-            
-            <div class="row">
-                <div class="form-group">
-                    <label>Fee Multiplier</label>
-                    <input type="number" id="fee-multiplier" value="1" onchange="Engine.calcFee()">
-                    <div style="font-size: 0.65rem; color: var(--accent); margin-top: 5px;" id="fee-calc-display">Fee: 0.01 Pi/tx</div>
-                </div>
-                <div class="form-group">
-                    <label>Number of Records (Batch)</label>
-                    <input type="number" id="batch-count" value="1">
-                </div>
-            </div>
+        <div class="form-group">
+            <label>LOCKED BALANCES</label>
+            <select id="locked-balances">
+                <option value="">Hit SYNC to fetch balances...</option>
+            </select>
+        </div>
 
-            <div class="row">
-                <div class="form-group">
-                    <label>Scheduled Fire Date</label>
-                    <input type="date" id="fire-date">
-                </div>
-                <div class="form-group">
-                    <label>Scheduled Fire Time</label>
-                    <div class="input-wrapper">
-                        <input type="time" id="fire-time" step="1">
-                        <button class="btn btn-action" onclick="Engine.autoFetchUnlockTime()">$ <span class="spinner" id="spin-time"></span></button>
-                    </div>
-                </div>
-            </div>
+        <div class="form-group">
+            <label>EXECUTION MODE</label>
+            <select id="exec-mode" onchange="toggleSchedule()">
+                <option value="SCHEDULED">Scheduled Fire Time</option>
+                <option value="IMMEDIATE">Start Immediately</option>
+            </select>
+        </div>
 
-            <div class="row">
-                <div class="form-group">
-                    <label>Req/sec Limit</label>
-                    <input type="number" id="req-sec" value="10">
+        <div class="form-group" id="schedule-group">
+            <label>SCHEDULED FIRE TIME (AUTO-DETECTED)</label>
+            <div class="grouped-box">
+                <div class="grouped-row">
+                    <div class="grouped-label">DATE</div>
+                    <div class="grouped-input"><input type="date" id="fire-date"></div>
                 </div>
-                <div class="form-group">
-                    <label>Early Call (ms)</label>
-                    <input type="number" id="early-call" value="1000">
+                <div class="grouped-row">
+                    <div class="grouped-label">TIME</div>
+                    <div class="grouped-input"><input type="time" id="fire-time" step="1"></div>
                 </div>
             </div>
         </div>
 
-        <button class="btn-primary" id="btn-arm" onclick="Engine.toggleExecution()">ARM & SCHEDULE</button>
-        <button class="btn btn-danger" style="width: 100%; margin-top: 10px; display: none;" id="btn-pause" onclick="Engine.toggleExecution()">PAUSE EXECUTION</button>
+        <div class="form-group">
+            <label>Rate Control & Strategy</label>
+            <div class="grouped-box">
+                <div class="grouped-row">
+                    <div class="grouped-label">Req/sec</div>
+                    <div class="grouped-input"><input type="number" id="req-sec" value="10"></div>
+                </div>
+                <div class="grouped-row">
+                    <div class="grouped-label">Early (ms)</div>
+                    <div class="grouped-input"><input type="number" id="early-ms" value="1000"></div>
+                </div>
+                <div class="grouped-row">
+                    <div class="grouped-label">Max TX (Retries)</div>
+                    <div class="grouped-input"><input type="number" id="max-tx" value="300"></div>
+                </div>
+                <div class="grouped-row">
+                    <div class="grouped-label">Fee (Pi)</div>
+                    <div class="grouped-input"><input type="number" id="fee-pi" value="0.01" step="0.001"></div>
+                </div>
+            </div>
+        </div>
+
+        <button class="btn-arm" id="btn-arm" onclick="Bot.armSystem()">
+            <span>⏻ ARM & SCHEDULE</span>
+        </button>
+
+        <div class="console" id="console">SYSTEM READY.</div>
     </div>
 
     <div class="content hidden" id="tab-fee">
-        <div class="section">
-            <div class="section-title">MULTI-WALLET FEE MANAGER</div>
-            <div class="form-group">
-                <label>Import Seed Phrases (One per line)</label>
-                <textarea id="fee-seeds" rows="5" placeholder="Enter seed phrases to act as fee payers..."></textarea>
-            </div>
-            <div class="row">
-                <button class="btn" onclick="FeeManager.saveSeeds()">Save List</button>
-                <button class="btn btn-action" onclick="FeeManager.calcStats()">$ Calc Stats <span class="spinner" id="spin-fee"></span></button>
-            </div>
-            
-            <div class="form-group" style="margin-top: 15px;">
-                <label>Fee Network Stats</label>
-                <div class="log-panel" style="height: 100px;" id="fee-stats">
-                    Waiting for calculation...
-                </div>
-            </div>
+        <div class="section-header">
+            <h2>Fee Manager</h2>
+            <p>Manage Multiple Sponsor Wallets</p>
         </div>
+        <div class="form-group">
+            <label>SPONSOR PASSPHRASES</label>
+            <textarea id="fm-seeds" rows="5" placeholder="Paste sponsor seeds here..."></textarea>
+        </div>
+        <button class="btn-fetch" style="width:100%; padding:10px;" onclick="Bot.syncSponsors()">FETCH SPONSOR DATA</button>
+        <div class="console" id="fm-console" style="height: 300px; margin-top:20px;"></div>
     </div>
 
-    <div class="content hidden" id="tab-logs">
-        <div class="section">
-            <div class="flex-between" style="margin-bottom: 10px;">
-                <div class="section-title">SYSTEM LOGS</div>
-                <button class="btn" onclick="Logger.exportLogs()">Export</button>
-            </div>
-            <div class="log-panel" id="main-logs" style="height: 400px;"></div>
-        </div>
-    </div>
-
-    <div class="status-bar">
-        <span id="sys-status" style="color: var(--accent);">STATUS: IDLE</span>
-        <span id="sys-time">00:00:00</span>
+    <div style="border-top: 1px solid var(--border-color); padding: 8px 15px; font-size: 0.55rem; color: var(--text-primary); background: #03060a; display:flex; justify-content:space-between;">
+        <div>&#9888; DO NOT USE FOR FRAUDULENT OR ILLEGAL ACTIVITIES</div>
+        <div style="color: #27c93f;">SYS:OK</div>
     </div>
 </div>
 
 <script>
-    // ==========================================
-    // UTILS & STATE MANAGEMENT (Riverpod concept)
-    // ==========================================
-    const State = {
-        config: {
-            network: 'mainnet',
-            serverIp: '14.24.120.142',
-            feeWallets: [],
-            baseFee: 0.01,
-        },
-        isRunning: false,
-        logs: [],
-        serverOffset: 0
-    };
-
-    const Logger = {
-        log: (msg, type = 'info') => {
-            const time = new Date().toLocaleTimeString();
-            const logEntry = `[${time}] ${msg}`;
-            State.logs.push(logEntry);
-            
-            const panel = document.getElementById('main-logs');
-            const p = document.createElement('div');
-            p.className = `log-entry log-${type}`;
-            p.innerText = logEntry;
-            panel.appendChild(p);
-            panel.scrollTop = panel.scrollHeight;
-        },
-        exportLogs: () => {
-            const blob = new Blob([State.logs.join('\n')], { type: 'text/plain' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `pi_bot_logs_${Date.now()}.txt`;
-            a.click();
-        }
-    };
-
-    // ==========================================
-    // UI CONTROLLER
-    // ==========================================
-    function switchTab(tabId) {
-        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-        document.querySelectorAll('.content').forEach(c => c.classList.add('hidden'));
-        
-        event.target.classList.add('active');
-        document.getElementById(`tab-${tabId}`).classList.remove('hidden');
-    }
-
     function toggleVis(id) {
         const el = document.getElementById(id);
         el.type = el.type === 'password' ? 'text' : 'password';
     }
 
-    function openExplorer(id) {
-        const addr = document.getElementById(id).value;
-        if(!addr) return alert("Address empty");
-        window.open(`https://minepi.com/blockexplorer/account/${addr}`, '_blank');
+    function switchTab(tab) {
+        document.getElementById('tab-transfer').classList.add('hidden');
+        document.getElementById('tab-fee').classList.add('hidden');
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        
+        document.getElementById(`tab-${tab}`).classList.remove('hidden');
+        event.target.classList.add('active');
     }
 
-    setInterval(() => {
-        const now = new Date(Date.now() + State.serverOffset);
-        document.getElementById('sys-time').innerText = now.toLocaleTimeString();
-    }, 1000);
+    let feePayerType = 'sender';
+    function toggleFee(type) {
+        feePayerType = type;
+        document.getElementById('btn-sender').classList.toggle('active', type === 'sender');
+        document.getElementById('btn-custom').classList.toggle('active', type === 'custom');
+        document.getElementById('custom-fee-group').classList.toggle('hidden', type === 'sender');
+    }
 
-    // ==========================================
-    // API INTEGRATION (Connected to Netlify Backend)
-    // ==========================================
-    const PiApiSimulation = {
-        delay: (ms) => new Promise(res => setTimeout(res, ms)),
+    function toggleSchedule() {
+        const mode = document.getElementById('exec-mode').value;
+        document.getElementById('schedule-group').classList.toggle('hidden', mode === 'IMMEDIATE');
+    }
+
+    const Logger = {
+        log: (msg, isErr=false) => {
+            const c = document.getElementById('console');
+            c.innerHTML += `<div class="${isErr?'err':''}">${new Date().toLocaleTimeString()} - ${msg}</div>`;
+            c.scrollTop = c.scrollHeight;
+        }
+    };
+
+    const Bot = {
+        isRunning: false,
         
-        callBackend: async (action, paymentId, txid = null) => {
-            const response = await fetch('/api/pi-engine', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action, paymentId, txid })
-            });
-            
-            const data = await response.json();
-            if (!response.ok) {
-                throw new Error(data.error || 'Backend connection failed');
-            }
-            return data;
-        },
-
-        getWalletInfo: async (seed) => {
-            await PiApiSimulation.delay(1200); 
-            if(!seed || seed.length < 10) throw new Error("Invalid Passphrase");
-            const mockAddress = "G" + btoa(seed).replace(/[^A-Z0-9]/ig, '').substring(0, 55).toUpperCase();
-            return {
-                address: mockAddress,
-                available: (Math.random() * 500 + 10).toFixed(4),
-                locked: (Math.random() * 1000).toFixed(4),
-                unlockTimestamp: Date.now() + (Math.random() * 86400000)
-            };
-        },
-
-        executeTransaction: async (payload, feeWallet) => {
-            const paymentId = "PAY_" + Math.random().toString(36).substr(2, 10).toUpperCase();
-            
-            Logger.log(`[Backend] Approving Payment: ${paymentId}...`, "info");
-            await PiApiSimulation.callBackend('approve', paymentId);
-            
-            await PiApiSimulation.delay(1500); 
-            const generatedTxId = "tx_" + Math.random().toString(36).substr(2, 12);
-            
-            Logger.log(`[Backend] Completing Payment with TXID: ${generatedTxId}...`, "info");
-            await PiApiSimulation.callBackend('complete', paymentId, generatedTxId);
-            
-            return {
-                txid: generatedTxId,
-                status: "developer_completed",
-                feeUsed: payload.fee,
-                paidBy: feeWallet
-            };
-        }
-    };
-
-    // ==========================================
-    // SERVICES
-    // ==========================================
-    const NetworkService = {
-        syncTime: async () => {
-            Logger.log("Syncing with network node...", "warn");
-            await PiApiSimulation.delay(800);
-            State.serverOffset = Math.floor(Math.random() * 1000) - 500; // Mock offset
-            Logger.log(`Time synced. Offset: ${State.serverOffset}ms`, "success");
-            document.getElementById('api-limit').innerText = "1000";
-            document.getElementById('api-remaining').innerText = "999";
-        }
-    };
-
-    const WalletService = {
-        deriveAddress: async () => {
+        // 1. AUTO FETCH UNLOCK TIME & BALANCES
+        autoSync: async () => {
             const seed = document.getElementById('sender-seed').value;
-            const spin = document.getElementById('spin-addr');
-            try {
-                spin.style.display = 'inline-block';
-                const info = await PiApiSimulation.getWalletInfo(seed);
-                document.getElementById('sender-address').value = info.address;
-                Logger.log(`Address derived: ${info.address.substring(0,8)}...`, "info");
-            } catch (e) {
-                Logger.log(`Derivation error: ${e.message}`, "error");
-            } finally {
-                spin.style.display = 'none';
-            }
-        },
-        fetchBalances: async () => {
-            const seed = document.getElementById('sender-seed').value;
-            const spin = document.getElementById('spin-bal');
-            try {
-                spin.style.display = 'inline-block';
-                const info = await PiApiSimulation.getWalletInfo(seed);
-                document.getElementById('sender-avail').value = `${info.available} Pi`;
-                document.getElementById('sender-locked').value = `${info.locked} Pi`;
-                Logger.log("Balances updated successfully.", "success");
-            } catch (e) {
-                Logger.log(`Balance fetch error: ${e.message}`, "error");
-            } finally {
-                spin.style.display = 'none';
-            }
-        }
-    };
-
-    const FeeManager = {
-        saveSeeds: () => {
-            const text = document.getElementById('fee-seeds').value;
-            State.config.feeWallets = text.split('\n').filter(s => s.trim() !== '');
-            Logger.log(`Saved ${State.config.feeWallets.length} fee wallets.`, "success");
-            localStorage.setItem('pi_fee_wallets', JSON.stringify(State.config.feeWallets));
-        },
-        calcStats: async () => {
-            const spin = document.getElementById('spin-fee');
-            const panel = document.getElementById('fee-stats');
+            if(!seed) return alert("Enter Sender Passphrase");
+            Logger.log("Syncing with blockchain...");
             
-            if(State.config.feeWallets.length === 0) {
-                panel.innerHTML = "<span class='log-error'>No fee wallets loaded.</span>";
-                return;
-            }
-
             try {
-                spin.style.display = 'inline-block';
-                panel.innerHTML = "Scanning nodes...<br>";
+                const res = await fetch('/.netlify/functions/pi-engine', {
+                    method: 'POST', body: JSON.stringify({ action: 'sync', seed })
+                });
+                const data = await res.json();
                 
-                let total = 0;
-                for(let i=0; i<State.config.feeWallets.length; i++) {
-                    const info = await PiApiSimulation.getWalletInfo(State.config.feeWallets[i]);
-                    total += parseFloat(info.available);
+                const select = document.getElementById('locked-balances');
+                select.innerHTML = '';
+                
+                if(!data.balances || data.balances.length === 0) {
+                    select.innerHTML = '<option value="">No locked balances</option>';
+                    return Logger.log("No locked balances found.", true);
                 }
-                
-                panel.innerHTML += `
-                    Wallets Active: ${State.config.feeWallets.length}<br>
-                    Total Fee Pool: ${total.toFixed(4)} Pi<br>
-                    Avg per Wallet: ${(total / State.config.feeWallets.length).toFixed(4)} Pi<br>
-                    Status: <span style="color:var(--success)">READY FOR BATCH</span>
-                `;
-            } catch (e) {
-                panel.innerHTML += `<span class='log-error'>Error: ${e.message}</span>`;
-            } finally {
-                spin.style.display = 'none';
-            }
-        }
-    };
 
-    const Engine = {
-        calcFee: () => {
-            const mult = document.getElementById('fee-multiplier').value || 1;
-            const finalFee = (State.config.baseFee * parseFloat(mult)).toFixed(4);
-            document.getElementById('fee-calc-display').innerText = `Calculated Fee: ${finalFee} Pi/tx`;
-            return finalFee;
+                data.balances.forEach((b, i) => {
+                    const opt = document.createElement('option');
+                    opt.value = b.id;
+                    opt.dataset.amount = b.amount;
+                    opt.text = `ID: ${b.id.substring(0,8)}... | ${b.amount} Pi`;
+                    select.add(opt);
+
+                    // AUTO DETECT UNLOCK TIME
+                    if(i === 0 && b.unlockTime) {
+                        const d = new Date(b.unlockTime);
+                        document.getElementById('fire-date').value = d.toISOString().split('T')[0];
+                        document.getElementById('fire-time').value = d.toTimeString().split(' ')[0];
+                        Logger.log(`Auto-detected exact unlock time: ${b.unlockTime}`);
+                    }
+                });
+            } catch(e) { Logger.log("Sync failed.", true); }
         },
 
-        autoFetchUnlockTime: async () => {
-            const seed = document.getElementById('sender-seed').value;
-            const spin = document.getElementById('spin-time');
-            try {
-                spin.style.display = 'inline-block';
-                Logger.log("Scanning blockchain for predicate.not.abs_before...", "info");
-                const info = await PiApiSimulation.getWalletInfo(seed);
-                
-                const dateObj = new Date(info.unlockTimestamp);
-                document.getElementById('fire-date').value = dateObj.toISOString().split('T')[0];
-                document.getElementById('fire-time').value = dateObj.toTimeString().split(' ')[0];
-                
-                Logger.log(`Unlock time identified: ${dateObj.toLocaleString()}`, "success");
-            } catch(e) {
-                Logger.log(`Time fetch error: ${e.message}`, "error");
-            } finally {
-                spin.style.display = 'none';
-            }
-        },
-
-        toggleExecution: () => {
-            if (State.isRunning) {
-                State.isRunning = false;
-                document.getElementById('btn-arm').style.display = 'block';
-                document.getElementById('btn-pause').style.display = 'none';
-                document.getElementById('sys-status').innerText = "STATUS: PAUSED";
-                document.getElementById('sys-status').style.color = "var(--warn)";
-                Logger.log("Execution halted by user.", "warn");
-            } else {
-                Engine.startBatch();
-            }
-        },
-
-        startBatch: async () => {
-            const receiver = document.getElementById('receiver-address').value;
-            const amount = document.getElementById('tx-amount').value;
-            const batchCount = parseInt(document.getElementById('batch-count').value);
-            const fee = Engine.calcFee();
-
-            if(!receiver) return alert("Receiver address required.");
-
-            State.isRunning = true;
-            document.getElementById('btn-arm').style.display = 'none';
-            document.getElementById('btn-pause').style.display = 'block';
-            document.getElementById('sys-status').innerText = "STATUS: ARMED & RUNNING";
-            document.getElementById('sys-status').style.color = "var(--success)";
+        // 2. FEE MANAGER SYNC
+        syncSponsors: async () => {
+            const seeds = document.getElementById('fm-seeds').value.split('\n').filter(s=>s.trim()!=='');
+            if(seeds.length === 0) return;
+            document.getElementById('fm-console').innerHTML = "Fetching sponsor wallets data...\n";
             
-            Logger.log(`=== BATCH INITIATED: ${batchCount} TXs ===`, "success");
+            try {
+                const res = await fetch('/.netlify/functions/pi-engine', {
+                    method: 'POST', body: JSON.stringify({ action: 'sync_sponsors', seeds })
+                });
+                const data = await res.json();
+                data.sponsors.forEach((s, i) => {
+                    document.getElementById('fm-console').innerHTML += `[Wallet ${i+1}] PubKey: ${s.address.substring(0,15)}... | Bal: ${s.balance} Pi | Status: ${s.status}<br>`;
+                });
+            } catch(e) { document.getElementById('fm-console').innerHTML += "<span class='err'>Error fetching sponsors.</span>"; }
+        },
 
-            // Schedule check
-            const fireDate = document.getElementById('fire-date').value;
-            const fireTime = document.getElementById('fire-time').value;
-            const earlyCall = parseInt(document.getElementById('early-call').value) || 0;
-
-            if (fireDate && fireTime) {
-                const targetTime = new Date(`${fireDate}T${fireTime}`).getTime() - earlyCall;
-                Logger.log(`Awaiting scheduled time... (Early call: ${earlyCall}ms)`, "warn");
-                
-                while(Date.now() < targetTime && State.isRunning) {
-                    await PiApiSimulation.delay(500);
-                }
-                if(!State.isRunning) return;
-                Logger.log(`Time reached. Executing batch.`, "success");
+        // 3. EXECUTION LOGIC (Immediate / Scheduled + Retry + Multi-Sponsor)
+        armSystem: async () => {
+            if(Bot.isRunning) {
+                Bot.isRunning = false;
+                document.getElementById('btn-arm').innerHTML = '<span>⏻ ARM & SCHEDULE</span>';
+                return Logger.log("Process Aborted by User.", true);
             }
 
-            let successCount = 0;
-            let failCount = 0;
+            const seed = document.getElementById('sender-seed').value;
+            const receiver = document.getElementById('receiver').value;
+            const claimableSelect = document.getElementById('locked-balances');
+            const claimableId = claimableSelect.value;
+            
+            if(!seed || !receiver) return alert("Fill Passphrase and Receiver Address");
 
-            for (let i = 1; i <= batchCount; i++) {
-                if (!State.isRunning) break;
+            Bot.isRunning = true;
+            document.getElementById('btn-arm').innerHTML = '<span style="color:#ff5f56;">🛑 STOP PROCESS</span>';
 
-                // Fee Rotation Protocol
-                const feeWallet = State.config.feeWallets.length > 0 
-                    ? State.config.feeWallets[i % State.config.feeWallets.length] 
-                    : "SENDER_WALLET";
+            const mode = document.getElementById('exec-mode').value;
+            const reqSec = parseInt(document.getElementById('req-sec').value);
+            const maxTx = parseInt(document.getElementById('max-tx').value); // Number transaction records (Retries)
+            const feePi = document.getElementById('fee-pi').value; // EXACT FEE INPUT
+            const amountToSend = claimableSelect.options[claimableSelect.selectedIndex]?.dataset.amount || 0;
+            
+            // MULTI SPONSOR PARSING
+            const sponsors = document.getElementById('custom-fee-seeds').value.split('\n').filter(s=>s.trim()!=='');
 
-                Logger.log(`[TX ${i}/${batchCount}] Constructing payload. Routing fee via: ${feeWallet.substring(0,8)}...`, "info");
+            // TIMING STRATEGY
+            if(mode === 'SCHEDULED') {
+                const date = document.getElementById('fire-date').value;
+                const time = document.getElementById('fire-time').value;
+                const earlyMs = parseInt(document.getElementById('early-ms').value);
+                
+                if(date && time) {
+                    const targetTime = new Date(`${date}T${time}`).getTime();
+                    const fireTime = targetTime - earlyMs;
+                    Logger.log(`System Armed. Waiting for exactly: ${new Date(fireTime).toLocaleTimeString()} (Early MS applied)`);
+                    
+                    while(Date.now() < fireTime && Bot.isRunning) {
+                        await new Promise(r => setTimeout(r, 10)); // Precision wait
+                    }
+                }
+            }
+
+            if(!Bot.isRunning) return;
+            Logger.log(">>> EXECUTING ATOMIC CLAIM & TRANSFER <<<");
+
+            let attempt = 0;
+            let success = false;
+
+            // AUTO RETRY STRATEGY
+            while(attempt < maxTx && Bot.isRunning && !success) {
+                attempt++;
+                Logger.log(`[Attempt ${attempt}/${maxTx}] Firing ${reqSec} concurrent requests...`);
+                
+                const promises = [];
+                for(let i=0; i<reqSec; i++) {
+                    // SPONSOR ROTATION
+                    let sponsorSeed = "";
+                    if(feePayerType === 'custom' && sponsors.length > 0) {
+                        sponsorSeed = sponsors[Math.floor(Math.random() * sponsors.length)];
+                    }
+
+                    promises.push(
+                        fetch('/.netlify/functions/pi-engine', {
+                            method: 'POST', 
+                            body: JSON.stringify({
+                                action: 'execute',
+                                seed, receiver, claimableId, amountToSend,
+                                feePayer: feePayerType, sponsorSeed, feePi
+                            })
+                        }).then(r => r.json())
+                    );
+                }
 
                 try {
-                    const result = await PiApiSimulation.executeTransaction({
-                        to: receiver,
-                        amount: amount,
-                        fee: fee,
-                        memo: document.getElementById('tx-memo').value
-                    }, feeWallet);
-
-                    successCount++;
-                    Logger.log(`[TX ${i}] SUCCESS | TxID: ${result.txid} | Fee Used: ${result.feeUsed}`, "success");
-                } catch (e) {
-                    failCount++;
-                    Logger.log(`[TX ${i}] FAILED | Retrying in next block | Err: ${e.message}`, "error");
+                    const result = await Promise.any(promises.map(p => p.then(res => {
+                        if(res.success) return res;
+                        throw new Error(res.error);
+                    })));
+                    
+                    success = true;
+                    Logger.log(`[SUCCESS] Transaction Confirmed! Hash: ${result.txid.substring(0,15)}...`);
+                } catch(e) {
+                    Logger.log(`[RETRY] Node rejected requests. Retrying...`, true);
+                    await new Promise(r => setTimeout(r, 1000)); // Delay before next batch retry
                 }
-
-                // Rate limiting
-                const reqSec = parseInt(document.getElementById('req-sec').value) || 10;
-                await PiApiSimulation.delay(1000 / reqSec);
             }
 
-            State.isRunning = false;
-            document.getElementById('btn-arm').style.display = 'block';
-            document.getElementById('btn-pause').style.display = 'none';
-            document.getElementById('sys-status').innerText = "STATUS: COMPLETED";
+            if(!success && Bot.isRunning) Logger.log(`[STOPPED] Reached Max TX limit (${maxTx}).`, true);
             
-            Logger.log(`=== BATCH COMPLETE ===`, "success");
-            Logger.log(`Total: ${batchCount} | Success: ${successCount} | Failed: ${failCount}`, "info");
+            Bot.isRunning = false;
+            document.getElementById('btn-arm').innerHTML = '<span>⏻ ARM & SCHEDULE</span>';
         }
     };
-
-    // ==========================================
-    // INITIALIZATION
-    // ==========================================
-    window.onload = () => {
-        const savedWallets = localStorage.getItem('pi_fee_wallets');
-        if (savedWallets) {
-            State.config.feeWallets = JSON.parse(savedWallets);
-            document.getElementById('fee-seeds').value = State.config.feeWallets.join('\n');
-            Logger.log(`Restored ${State.config.feeWallets.length} fee wallets from config.`, "info");
-        }
-        
-        // Setup dates
-        const now = new Date();
-        document.getElementById('fire-date').value = now.toISOString().split('T')[0];
-        
-        Logger.log("SYSTEM BOOT SEQUENCE COMPLETE.", "success");
-        Logger.log("Pi Platform APIs initialized.", "info");
-    };
-
 </script>
 </body>
 </html>
