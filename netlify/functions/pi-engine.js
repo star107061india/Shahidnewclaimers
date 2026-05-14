@@ -3,17 +3,12 @@ const { mnemonicToSeedSync } = require('bip39');
 const { derivePath } = require('ed25519-hd-key');
 const axios = require('axios');
 
-// 24-word phrase se real Pi Keypair nikalne ka formula
-const createKeypairFromMnemonic = (mnemonic) => {
+const createKeypair = (secret) => {
     try {
-        const seed = mnemonicToSeedSync(mnemonic.trim());
-        const derivedKey = derivePath("m/44'/314159'/0'", seed.toString('hex')).key;
-        return Keypair.fromRawEd25519Seed(derivedKey);
-    } catch (e) {
-        // Agar kisine direct 'S' wali private key daali ho
-        try { return Keypair.fromSecret(mnemonic.trim()); } 
-        catch(err) { throw new Error("Invalid 24-word Passphrase or Secret Key."); }
-    }
+        if (secret.startsWith('S') && secret.length === 56) return Keypair.fromSecret(secret);
+        const seed = mnemonicToSeedSync(secret.trim());
+        return Keypair.fromRawEd25519Seed(derivePath("m/44'/314159'/0'", seed.toString('hex')).key);
+    } catch (e) { throw new Error("Invalid Passphrase"); }
 };
 
 exports.handler = async (event) => {
@@ -21,98 +16,85 @@ exports.handler = async (event) => {
 
     try {
         const data = JSON.parse(event.body);
-        const serverUrl = data.network === 'testnet' ? 'https://api.testnet.minepi.com' : 'https://api.mainnet.minepi.com';
-        const networkPassphrase = data.network === 'testnet' ? 'Pi Testnet' : 'Pi Network';
-        
-        // Timeout kam rakha hai taaki fast kaam kare
-        const server = new Horizon.Server(serverUrl, { httpClient: axios.create({ timeout: 15000 }) });
+        const server = new Horizon.Server('https://api.mainnet.minepi.com', { 
+            httpClient: axios.create({ timeout: 15000 }) 
+        });
 
-        // ===============================================
-        // ACTION 1: FETCH WALLET DATA & UNLOCK TIME
-        // ===============================================
-        if (data.action === 'wallet_info') {
-            const kp = createKeypairFromMnemonic(data.seed);
+        // 1. AUTO FETCH BALANCES & UNLOCK TIME
+        if (data.action === 'sync') {
+            const kp = createKeypair(data.seed);
             const pubKey = kp.publicKey();
-            let avail = "0.00", locked = "0.00", unlockTime = null;
+            let balances = [];
 
             try {
-                const account = await server.loadAccount(pubKey);
-                account.balances.forEach(b => { if (b.asset_type === 'native') avail = b.balance; });
-            } catch(e) {} // Unfunded account
-
-            try {
-                const claimables = await server.claimableBalances().claimant(pubKey).limit(100).call();
+                const claimables = await server.claimableBalances().claimant(pubKey).limit(20).call();
                 if (claimables.records && claimables.records.length > 0) {
-                    claimables.records.forEach(cb => {
-                        locked = (parseFloat(locked) + parseFloat(cb.amount)).toFixed(7);
-                        // Fetch the exact unlock time from the blockchain
+                    balances = claimables.records.map(cb => {
+                        let unlockTime = null;
                         if (cb.predicate && cb.predicate.not && cb.predicate.not.abs_before) {
-                            const time = new Date(cb.predicate.not.abs_before);
-                            if (!unlockTime || time < unlockTime) unlockTime = time;
+                            unlockTime = cb.predicate.not.abs_before;
                         }
+                        return { id: cb.id, amount: cb.amount, unlockTime };
                     });
                 }
             } catch(e) {}
 
-            return { 
-                statusCode: 200, 
-                body: JSON.stringify({ 
-                    address: pubKey, 
-                    available: avail, 
-                    locked: locked, 
-                    unlockTime: unlockTime ? unlockTime.toISOString() : null 
-                }) 
-            };
+            return { statusCode: 200, body: JSON.stringify({ address: pubKey, balances }) };
         }
 
-        // ===============================================
-        // ACTION 2: EXECUTE HIGH-SPEED TRANSFER
-        // ===============================================
-        if (data.action === 'execute_tx') {
-            const senderKp = createKeypairFromMnemonic(data.seed);
-            let feeKp = senderKp; // Default to sender paying fees
+        // 2. FEE MANAGER: MULTI-SPONSOR FETCH
+        if (data.action === 'sync_sponsors') {
+            let results = [];
+            for (let seed of data.seeds) {
+                try {
+                    const kp = createKeypair(seed);
+                    const account = await server.loadAccount(kp.publicKey());
+                    let avail = "0.00";
+                    account.balances.forEach(b => { if (b.asset_type === 'native') avail = b.balance; });
+                    results.push({ address: kp.publicKey(), balance: avail, status: 'Active' });
+                } catch(e) {
+                    results.push({ address: 'Invalid/Unfunded', balance: '0.00', status: 'Failed' });
+                }
+            }
+            return { statusCode: 200, body: JSON.stringify({ sponsors: results }) };
+        }
+
+        // 3. EXECUTE: ATOMIC CLAIM + TRANSFER WITH CUSTOM EXACT FEE
+        if (data.action === 'execute') {
+            const senderKp = createKeypair(data.seed);
+            let feeKp = senderKp;
             
-            // Fee Wallet Rotation bypass
-            if (data.feeSeed && data.feeSeed.trim() !== '' && data.feeSeed !== "SENDER_WALLET") {
-                feeKp = createKeypairFromMnemonic(data.feeSeed);
+            if (data.feePayer === 'custom' && data.sponsorSeed) {
+                feeKp = createKeypair(data.sponsorSeed);
             }
 
-            // Fee wallet (or sender) sequence number load karte hain
             const sourceAccount = await server.loadAccount(feeKp.publicKey());
-            const baseFee = await server.fetchBaseFee(); // Standard is 10000 stroops
             
-            // Fee Multiplier logic
-            const finalFee = parseInt(baseFee) * (parseFloat(data.feeMultiplier) || 1);
+            // EXACT FEE LOGIC: UI Input (e.g., 0.01 Pi) converted exactly to stroops (1 Pi = 10,000,000 stroops)
+            const feeStroops = Math.floor(parseFloat(data.feePi) * 10000000).toString();
 
             let tx = new TransactionBuilder(sourceAccount, { 
-                fee: finalFee.toString(), 
-                networkPassphrase: networkPassphrase 
+                fee: feeStroops, 
+                networkPassphrase: 'Pi Network' 
             });
+
+            if (data.claimableId) {
+                tx.addOperation(Operation.claimClaimableBalance({ balanceId: data.claimableId, source: senderKp.publicKey() }));
+            }
 
             tx.addOperation(Operation.payment({
                 destination: data.receiver.trim(),
                 asset: Asset.native(),
-                amount: data.amount.toString(),
+                amount: data.amountToSend.toString(),
                 source: senderKp.publicKey()
             }));
 
-            if (data.memo && data.memo.trim() !== '') {
-                tx.addMemo(Memo.text(data.memo.trim()));
-            }
-
             const transaction = tx.setTimeout(30).build();
             transaction.sign(senderKp);
-            
-            // Agar sponsor fee de raha hai toh double signature
-            if (senderKp.publicKey() !== feeKp.publicKey()) {
-                transaction.sign(feeKp);
-            }
+            if (senderKp.publicKey() !== feeKp.publicKey()) transaction.sign(feeKp);
 
             const result = await server.submitTransaction(transaction);
-            return { 
-                statusCode: 200, 
-                body: JSON.stringify({ success: true, txid: result.hash, feeUsed: (finalFee / 10000000).toFixed(6) }) 
-            };
+            return { statusCode: 200, body: JSON.stringify({ success: true, txid: result.hash }) };
         }
 
     } catch (error) {
