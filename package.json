@@ -1,6 +1,6 @@
 {
-  "name": "pi-fast-bot",
-  "version": "2.0.0",
+  "name": "pi-auto-transfer-bot",
+  "version": "1.0.0",
   "dependencies": {
     "axios": "^1.6.8",
     "bip39": "^3.1.0",
