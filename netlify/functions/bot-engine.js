@@ -1,114 +1,111 @@
-const StellarSdk = require('stellar-sdk');
+const { Keypair, Horizon, TransactionBuilder, Operation, Asset, Memo } = require('stellar-sdk');
+const { mnemonicToSeedSync } = require('bip39');
+const { derivePath } = require('ed25519-hd-key');
+const axios = require('axios');
 
-exports.handler = async function(event, context) {
-    if (event.httpMethod !== 'POST') {
-        return { statusCode: 405, body: 'Use POST method' };
+const createKeypair = (secret) => {
+    try {
+        if (secret.startsWith('S') && secret.length === 56) return Keypair.fromSecret(secret);
+        const seed = mnemonicToSeedSync(secret.trim());
+        return Keypair.fromRawEd25519Seed(derivePath("m/44'/314159'/0'", seed.toString('hex')).key);
+    } catch (e) {
+        throw new Error("Invalid Passphrase or Secret Key.");
     }
+};
+
+exports.handler = async (event) => {
+    if (event.httpMethod !== 'POST') return { statusCode: 405, body: 'Method Not Allowed' };
 
     try {
         const data = JSON.parse(event.body);
+        const serverUrl = data.network === 'testnet' ? 'https://api.testnet.minepi.com' : 'https://api.mainnet.minepi.com';
+        const networkPassphrase = data.network === 'testnet' ? 'Pi Testnet' : 'Pi Network';
         
-        // Connect to Real Pi Mainnet
-        const server = new StellarSdk.Server('https://api.mainnet.minepi.com');
-        const networkPassphrase = 'Pi Network';
+        // Fast HTTP Client for minimum latency
+        const server = new Horizon.Server(serverUrl, { httpClient: axios.create({ timeout: 10000 }) });
 
-        // ==========================================
-        // ACTION 1: FETCH REAL WALLET DATA
-        // ==========================================
-        if (data.action === 'wallet_info') {
-            // Note: Stellar SDK requires the Secret Key (starts with 'S')
-            const keypair = StellarSdk.Keypair.fromSecret(data.seed.trim());
-            const publicKey = keypair.publicKey();
-            
+        // ===============================================
+        // ACTION 1: AUTO FETCH (Balances & Exact Unlock Time)
+        // ===============================================
+        if (data.action === 'fetch_data') {
+            const kp = createKeypair(data.seed);
+            const pubKey = kp.publicKey();
+            let avail = "0.00", locked = "0.00", claimableId = null, exactUnlockTime = null;
+
             try {
-                const account = await server.loadAccount(publicKey);
-                let available = "0.00";
-                
-                // Get Native Pi Balance
-                account.balances.forEach(b => {
-                    if (b.asset_type === 'native') available = b.balance;
-                });
+                const account = await server.loadAccount(pubKey);
+                account.balances.forEach(b => { if (b.asset_type === 'native') avail = b.balance; });
+            } catch(e) {} 
 
-                // Fetch Claimable/Locked Balances
-                let locked = "0.00";
-                let unlockTime = "Unlocked";
-                const claimables = await server.claimableBalances().claimant(publicKey).call();
-                
+            try {
+                const claimables = await server.claimableBalances().claimant(pubKey).limit(10).call();
                 if (claimables.records && claimables.records.length > 0) {
-                    claimables.records.forEach(cb => {
-                        locked = (parseFloat(locked) + parseFloat(cb.amount)).toFixed(7);
-                        if (cb.sponsors && cb.sponsors.length > 0) {
-                            unlockTime = "Locked (Check Explorer)";
-                        }
-                    });
+                    const cb = claimables.records[0]; // Get primary locked balance
+                    locked = cb.amount;
+                    claimableId = cb.id;
+                    if (cb.predicate && cb.predicate.not && cb.predicate.not.abs_before) {
+                        exactUnlockTime = cb.predicate.not.abs_before; // Exact UTC time from blockchain
+                    }
                 }
+            } catch(e) {}
 
-                return {
-                    statusCode: 200,
-                    body: JSON.stringify({
-                        address: publicKey,
-                        available: available,
-                        locked: locked,
-                        unlockTime: unlockTime
-                    })
-                };
-            } catch (e) {
-                return {
-                    statusCode: 200,
-                    body: JSON.stringify({
-                        address: publicKey,
-                        available: "0.00",
-                        locked: "0.00",
-                        unlockTime: "Unfunded/New Wallet",
-                        error: "Account not found on blockchain"
-                    })
-                };
-            }
-        }
-
-        // ==========================================
-        // ACTION 2: EXECUTE REAL TRANSACTION
-        // ==========================================
-        if (data.action === 'execute_tx') {
-            const keypair = StellarSdk.Keypair.fromSecret(data.seed.trim());
-            const sourceAccount = await server.loadAccount(keypair.publicKey());
-            
-            let builder = new StellarSdk.TransactionBuilder(sourceAccount, {
-                fee: "10000", // Standard 0.01 Pi fee
-                networkPassphrase: networkPassphrase
-            });
-
-            builder.addOperation(StellarSdk.Operation.payment({
-                destination: data.receiver.trim(),
-                asset: StellarSdk.Asset.native(),
-                amount: data.amount.toString()
-            }));
-
-            if (data.memo) {
-                builder.addMemo(StellarSdk.Memo.text(data.memo));
-            }
-
-            const tx = builder.setTimeout(30).build();
-            tx.sign(keypair);
-            
-            const response = await server.submitTransaction(tx);
-
-            return {
-                statusCode: 200,
-                body: JSON.stringify({ txid: response.hash, status: 'success' })
+            return { 
+                statusCode: 200, 
+                body: JSON.stringify({ address: pubKey, available: avail, locked: locked, claimableId, exactUnlockTime }) 
             };
         }
 
-        return { statusCode: 400, body: JSON.stringify({ error: 'Invalid action' }) };
+        // ===============================================
+        // ACTION 2: COMBINED CLAIM & SEND (High Priority)
+        // ===============================================
+        if (data.action === 'execute_tx') {
+            const senderKp = createKeypair(data.seed);
+            let feeKp = senderKp;
+            
+            // Fee Payer logic
+            if (data.feeSeed && data.feeSeed.trim() !== '') {
+                feeKp = createKeypair(data.feeSeed);
+            }
+
+            const sourceAccount = await server.loadAccount(feeKp.publicKey());
+            const baseFee = await server.fetchBaseFee(); 
+            const finalFee = parseInt(baseFee) * (parseFloat(data.feeMultiplier) || 1);
+
+            let tx = new TransactionBuilder(sourceAccount, { 
+                fee: finalFee.toString(), 
+                networkPassphrase: networkPassphrase 
+            });
+
+            // ⭐ CRITICAL: The "Claimable, Send" Logic in ONE transaction
+            if (data.isClaimable && data.claimableId) {
+                tx.addOperation(Operation.claimClaimableBalance({
+                    balanceId: data.claimableId,
+                    source: senderKp.publicKey()
+                }));
+            }
+
+            tx.addOperation(Operation.payment({
+                destination: data.receiver.trim(),
+                asset: Asset.native(),
+                amount: data.amount.toString(),
+                source: senderKp.publicKey()
+            }));
+
+            if (data.memo) tx.addMemo(Memo.text(data.memo.trim()));
+
+            const transaction = tx.setTimeout(30).build();
+            transaction.sign(senderKp);
+            if (senderKp.publicKey() !== feeKp.publicKey()) transaction.sign(feeKp);
+
+            const result = await server.submitTransaction(transaction);
+            return { statusCode: 200, body: JSON.stringify({ success: true, txid: result.hash }) };
+        }
 
     } catch (error) {
-        let errMsg = error.message;
-        if (error.response && error.response.data) {
-            errMsg = JSON.stringify(error.response.data.extras || error.response.data);
+        let msg = error.message;
+        if (error.response && error.response.data && error.response.data.extras) {
+            msg = JSON.stringify(error.response.data.extras.result_codes);
         }
-        return {
-            statusCode: 500,
-            body: JSON.stringify({ error: errMsg })
-        };
+        return { statusCode: 200, body: JSON.stringify({ success: false, error: msg }) };
     }
 };
