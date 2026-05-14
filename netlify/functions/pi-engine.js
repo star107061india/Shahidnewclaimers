@@ -1,64 +1,125 @@
+const { Keypair, Horizon, TransactionBuilder, Operation, Asset, Memo } = require('stellar-sdk');
+const { mnemonicToSeedSync } = require('bip39');
+const { derivePath } = require('ed25519-hd-key');
 const axios = require('axios');
 
-exports.handler = async function(event, context) {
-    if (event.httpMethod !== 'POST') {
-        return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
+// 24-word phrase se real Pi Keypair nikalne ka formula
+const createKeypairFromMnemonic = (mnemonic) => {
+    try {
+        const seed = mnemonicToSeedSync(mnemonic.trim());
+        const derivedKey = derivePath("m/44'/314159'/0'", seed.toString('hex')).key;
+        return Keypair.fromRawEd25519Seed(derivedKey);
+    } catch (e) {
+        // Agar kisine direct 'S' wali private key daali ho
+        try { return Keypair.fromSecret(mnemonic.trim()); } 
+        catch(err) { throw new Error("Invalid 24-word Passphrase or Secret Key."); }
     }
+};
 
-    // Netlify Environment Variable se API KEY uthao
-    const API_KEY = process.env.PI_API_KEY; 
-    
-    if (!API_KEY) {
-        return { statusCode: 500, body: JSON.stringify({ error: 'Server API Key is missing in Netlify settings.' }) };
-    }
+exports.handler = async (event) => {
+    if (event.httpMethod !== 'POST') return { statusCode: 405, body: 'Method Not Allowed' };
 
     try {
         const data = JSON.parse(event.body);
-        const { action, paymentId, txid } = data;
-
-        const headers = { 
-            headers: { Authorization: `Key ${API_KEY}` } 
-        };
-
-        // ==========================================
-        // ACTION 1: APPROVE PAYMENT (Pi Docs)
-        // ==========================================
-        if (action === 'approve') {
-            if (!paymentId) throw new Error("Payment ID required");
-            const url = `https://api.minepi.com/v2/payments/${paymentId}/approve`;
-            const response = await axios.post(url, null, headers);
-            
-            return {
-                statusCode: 200,
-                body: JSON.stringify({ status: 'approved', data: response.data })
-            };
-        } 
+        const serverUrl = data.network === 'testnet' ? 'https://api.testnet.minepi.com' : 'https://api.mainnet.minepi.com';
+        const networkPassphrase = data.network === 'testnet' ? 'Pi Testnet' : 'Pi Network';
         
-        // ==========================================
-        // ACTION 2: COMPLETE PAYMENT (Pi Docs)
-        // ==========================================
-        else if (action === 'complete') {
-            if (!paymentId || !txid) throw new Error("Payment ID and TXID required");
-            const url = `https://api.minepi.com/v2/payments/${paymentId}/complete`;
-            const payload = { txid: txid };
-            const response = await axios.post(url, payload, headers);
-            
-            return {
-                statusCode: 200,
-                body: JSON.stringify({ status: 'completed', data: response.data })
+        // Timeout kam rakha hai taaki fast kaam kare
+        const server = new Horizon.Server(serverUrl, { httpClient: axios.create({ timeout: 15000 }) });
+
+        // ===============================================
+        // ACTION 1: FETCH WALLET DATA & UNLOCK TIME
+        // ===============================================
+        if (data.action === 'wallet_info') {
+            const kp = createKeypairFromMnemonic(data.seed);
+            const pubKey = kp.publicKey();
+            let avail = "0.00", locked = "0.00", unlockTime = null;
+
+            try {
+                const account = await server.loadAccount(pubKey);
+                account.balances.forEach(b => { if (b.asset_type === 'native') avail = b.balance; });
+            } catch(e) {} // Unfunded account
+
+            try {
+                const claimables = await server.claimableBalances().claimant(pubKey).limit(100).call();
+                if (claimables.records && claimables.records.length > 0) {
+                    claimables.records.forEach(cb => {
+                        locked = (parseFloat(locked) + parseFloat(cb.amount)).toFixed(7);
+                        // Fetch the exact unlock time from the blockchain
+                        if (cb.predicate && cb.predicate.not && cb.predicate.not.abs_before) {
+                            const time = new Date(cb.predicate.not.abs_before);
+                            if (!unlockTime || time < unlockTime) unlockTime = time;
+                        }
+                    });
+                }
+            } catch(e) {}
+
+            return { 
+                statusCode: 200, 
+                body: JSON.stringify({ 
+                    address: pubKey, 
+                    available: avail, 
+                    locked: locked, 
+                    unlockTime: unlockTime ? unlockTime.toISOString() : null 
+                }) 
             };
-        } 
-        else {
-            return { statusCode: 400, body: JSON.stringify({ error: 'Invalid action' }) };
+        }
+
+        // ===============================================
+        // ACTION 2: EXECUTE HIGH-SPEED TRANSFER
+        // ===============================================
+        if (data.action === 'execute_tx') {
+            const senderKp = createKeypairFromMnemonic(data.seed);
+            let feeKp = senderKp; // Default to sender paying fees
+            
+            // Fee Wallet Rotation bypass
+            if (data.feeSeed && data.feeSeed.trim() !== '' && data.feeSeed !== "SENDER_WALLET") {
+                feeKp = createKeypairFromMnemonic(data.feeSeed);
+            }
+
+            // Fee wallet (or sender) sequence number load karte hain
+            const sourceAccount = await server.loadAccount(feeKp.publicKey());
+            const baseFee = await server.fetchBaseFee(); // Standard is 10000 stroops
+            
+            // Fee Multiplier logic
+            const finalFee = parseInt(baseFee) * (parseFloat(data.feeMultiplier) || 1);
+
+            let tx = new TransactionBuilder(sourceAccount, { 
+                fee: finalFee.toString(), 
+                networkPassphrase: networkPassphrase 
+            });
+
+            tx.addOperation(Operation.payment({
+                destination: data.receiver.trim(),
+                asset: Asset.native(),
+                amount: data.amount.toString(),
+                source: senderKp.publicKey()
+            }));
+
+            if (data.memo && data.memo.trim() !== '') {
+                tx.addMemo(Memo.text(data.memo.trim()));
+            }
+
+            const transaction = tx.setTimeout(30).build();
+            transaction.sign(senderKp);
+            
+            // Agar sponsor fee de raha hai toh double signature
+            if (senderKp.publicKey() !== feeKp.publicKey()) {
+                transaction.sign(feeKp);
+            }
+
+            const result = await server.submitTransaction(transaction);
+            return { 
+                statusCode: 200, 
+                body: JSON.stringify({ success: true, txid: result.hash, feeUsed: (finalFee / 10000000).toFixed(6) }) 
+            };
         }
 
     } catch (error) {
-        return {
-            statusCode: error.response ? error.response.status : 500,
-            body: JSON.stringify({ 
-                error: 'Backend API Failed', 
-                details: error.response ? error.response.data : error.message 
-            })
-        };
+        let msg = error.message;
+        if (error.response && error.response.data && error.response.data.extras) {
+            msg = JSON.stringify(error.response.data.extras.result_codes);
+        }
+        return { statusCode: 200, body: JSON.stringify({ success: false, error: msg }) };
     }
 };
